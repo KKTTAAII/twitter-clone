@@ -64,7 +64,6 @@ def signup():
     If the there already is a user with that username: flash message
     and re-present form.
     """
-
     form = UserAddForm()
 
     if form.validate_on_submit():
