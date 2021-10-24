@@ -5,7 +5,7 @@ from flask_debugtoolbar import DebugToolbarExtension
 from sqlalchemy.exc import IntegrityError
 
 from forms import UserAddForm, LoginForm, MessageForm, EditProfileForm
-from models import db, connect_db, User, Message
+from models import db, connect_db, User, Message, Likes
 
 CURR_USER_KEY = "curr_user"
 
@@ -209,6 +209,36 @@ def stop_following(follow_id):
     return redirect(f"/users/{g.user.id}/following")
 
 
+@app.route('/users/add_like/<int:msg_id>', methods=['POST'])
+def like_message(msg_id):
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
+    user_id = g.user.id
+    user_likes = g.user.likes
+    liked_msg = Message.query.get_or_404(msg_id)
+
+    if liked_msg in user_likes:
+        g.user.likes = [like for like in user_likes if like != liked_msg]
+    else:
+        g.user.likes.append(liked_msg)
+
+    db.session.commit()
+   
+    return redirect("/")
+
+
+@app.route('/users/<int:user_id>/likes')
+def show_liked_msg(user_id):
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+    likes = g.user.likes
+    user = g.user
+    return render_template("users/likes.html", likes=likes, user=user)
+
+
 @app.route('/users/profile', methods=["GET", "POST"])
 def profile():
     """Update profile for current user."""
@@ -235,7 +265,6 @@ def profile():
         flash("Wrong password, please try again", "danger")
     else:
         return render_template("users/edit.html", form=form, user=user)
-
 
 
 @app.route('/users/delete', methods=["POST"])
@@ -314,9 +343,8 @@ def homepage():
     - anon users: no messages
     - logged in: 100 most recent messages of followed_users
     """
-
     if g.user:
-        user = User.query.filter_by(id=g.user.id).first()
+        user = g.user
         followings = [user.id for user in user.following]
         followings.append(g.user.id)
         messages = (Message
@@ -325,8 +353,10 @@ def homepage():
                     .order_by(Message.timestamp.desc())
                     .limit(100)
                     .all())
+        
+        liked_msg_ids = [msg.id for msg in g.user.likes]
 
-        return render_template('home.html', messages=messages)
+        return render_template('home.html', messages=messages, likes=liked_msg_ids)
 
     else:
         return render_template('home-anon.html')
